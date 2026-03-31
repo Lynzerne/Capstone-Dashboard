@@ -32,7 +32,7 @@ for file_name in os.listdir(PDF_FOLDER):
 
             print(
                 f"Page {page['page']}: "
-                f"{len(rules)} flow candidate(s), "
+                f"{len(rules)} flow rule(s), "
                 f"{len(stations)} station reference(s)"
             )
 
@@ -46,8 +46,7 @@ for file_name in os.listdir(PDF_FOLDER):
                 station["page_no"] = page["page"]
                 results.append(station)
 
-# Step 2: join flow rules to station references
-combined_rows = []
+print(f"DEBUG total raw results: {len(results)}")
 
 flow_rule_types = {
     "no_diversion",
@@ -59,23 +58,35 @@ flow_rule_types = {
 flow_rows = [r for r in results if r.get("rule_type") in flow_rule_types]
 station_rows = [r for r in results if r.get("rule_type") == "station_reference"]
 
+print(f"DEBUG flow rows: {len(flow_rows)}")
+print(f"DEBUG station rows: {len(station_rows)}")
+
+if flow_rows:
+    print("DEBUG first 5 flow rows:")
+    for row in flow_rows[:5]:
+        print(row)
+
+if station_rows:
+    print("DEBUG first 5 station rows:")
+    for row in station_rows[:5]:
+        print(row)
+
+# Step 2: join flow rules to station references
+combined_rows = []
+
 for flow in flow_rows:
     for station in station_rows:
         if flow.get("source_pdf") != station.get("source_pdf"):
             continue
 
-        # allow matching within same PDF + same river
-        if flow.get("source_pdf") != station.get("source_pdf"):
-            continue
-        
         if flow.get("river") != station.get("river"):
             continue
 
-        if flow.get("river") != station.get("river"):
+        if flow.get("river") is None or station.get("river") is None:
             continue
 
         combined_rows.append({
-            "rule_type": "combined_rule",
+            "rule_type": flow.get("rule_type"),
             "river": flow.get("river"),
             "threshold_value": flow.get("threshold_value"),
             "units": flow.get("units"),
@@ -86,11 +97,15 @@ for flow in flow_rows:
             "page_no": flow.get("page_no")
         })
 
+print(f"DEBUG combined rows before dedupe: {len(combined_rows)}")
+
 # Step 3: save
 df = pd.DataFrame(combined_rows)
 
 if not df.empty:
     df = df.drop_duplicates()
+
+print(f"DEBUG final rows after dedupe: {len(df)}")
 
 if df.empty:
     df = pd.DataFrame(columns=[
