@@ -49,7 +49,14 @@ for file_name in os.listdir(PDF_FOLDER):
 # Step 2: join flow rules to station references
 combined_rows = []
 
-flow_rows = [r for r in results if r.get("rule_type") == "flow_rule_candidate"]
+flow_rule_types = {
+    "no_diversion",
+    "instream_objective",
+    "flow_threshold",
+    "water_conservation_objective"
+}
+
+flow_rows = [r for r in results if r.get("rule_type") in flow_rule_types]
 station_rows = [r for r in results if r.get("rule_type") == "station_reference"]
 
 for flow in flow_rows:
