@@ -3,15 +3,15 @@ import re
 
 STATION_LOOKUP = {
     "05CC001": {
-        "river": "Blindman River",
+        "river": "Blindman",
         "station_name": "Blindman River near Blackfalds"
     },
     "05CC002": {
-        "river": "Red Deer River",
+        "river": "Red Deer",
         "station_name": "Red Deer River at Red Deer"
     },
     "05CB007": {
-        "river": "Red Deer River",
+        "river": "Red Deer",
         "station_name": "Dickson Dam Tunnel Outlet"
     }
 }
@@ -44,9 +44,9 @@ def extract_no_diversion_rules(text):
 
         # Assign river
         if value in [0, 0.16, 0.5]:
-            river = "Blindman River"
+            river = "Blindman"
         elif value == 16:
-            river = "Red Deer River"
+            river = "Red Deer"
         else:
             river = None
 
@@ -98,9 +98,8 @@ def extract_station_references(text):
 
     return results
 
-def extract_percent_rules(text):
-    import re
 
+def extract_percent_rules(text):
     results = []
 
     if not text:
@@ -114,7 +113,7 @@ def extract_percent_rules(text):
         results.append({
             "rule_type": "percent_diversion",
             "percent": percent,
-            "river": "Blindman River",  # safe assumption for now
+            "river": "Blindman",
             "source_text": text[:1500]
         })
 
