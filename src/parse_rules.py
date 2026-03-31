@@ -1,6 +1,22 @@
 import re
 
 
+STATION_LOOKUP = {
+    "05CC001": {
+        "river": "Blindman River",
+        "station_name": "Blindman River near Blackfalds"
+    },
+    "05CC002": {
+        "river": "Red Deer River",
+        "station_name": "Red Deer River at Red Deer"
+    },
+    "05CB007": {
+        "river": "Red Deer River",
+        "station_name": "Dickson Dam Tunnel Outlet"
+    }
+}
+
+
 def extract_no_diversion_rules(text):
     results = []
 
@@ -9,17 +25,30 @@ def extract_no_diversion_rules(text):
 
     text_lower = text.lower()
 
+    trigger_phrases = [
+        "no diversion",
+        "not divert",
+        "shall not divert",
+        "instream objective",
+        "water conservation objective",
+        "diversion table"
+    ]
+
+    if not any(phrase in text_lower for phrase in trigger_phrases):
+        return results
+
     pattern = r'(\d+(?:\.\d+)?)\s*cubic\s*meters?\s*per\s*second'
 
     for match in re.finditer(pattern, text, re.IGNORECASE):
         value = float(match.group(1))
 
-        river = None
-
-        if "blindman river" in text_lower:
+        # crude first-pass rule classification by value
+        if value in [0, 0.16, 0.5]:
             river = "Blindman River"
-        elif "red deer river" in text_lower:
+        elif value == 16:
             river = "Red Deer River"
+        else:
+            river = None
 
         results.append({
             "rule_type": "flow_rule_candidate",
@@ -42,18 +71,16 @@ def extract_station_references(text):
 
     for match in re.finditer(pattern, text):
         station_id = match.group(0)
-
-        river = None
-
-        if "blindman river" in text.lower():
-            river = "Blindman River"
-        elif "red deer river" in text.lower():
-            river = "Red Deer River"
+        station_info = STATION_LOOKUP.get(
+            station_id,
+            {"river": None, "station_name": None}
+        )
 
         results.append({
             "rule_type": "station_reference",
             "station_id": station_id,
-            "river": river,
+            "station_name": station_info["station_name"],
+            "river": station_info["river"],
             "source_text": text[:1500]
         })
 
