@@ -26,34 +26,38 @@ for file_name in os.listdir(PDF_FOLDER):
                 print(f"Page {page['page']}: no text extracted")
                 continue
 
-            # 1. No-diversion / flow rules
             rules = extract_no_diversion_rules(page_text)
-            
+            stations = extract_station_references(page_text)
+
+            print(
+                f"Page {page['page']}: "
+                f"{len(rules)} flow candidate(s), "
+                f"{len(stations)} station reference(s)"
+            )
+
             for rule in rules:
                 rule["source_pdf"] = file_name
                 rule["page_no"] = page["page"]
                 results.append(rule)
-            
-            
-            # 2. Station references
-            stations = extract_station_references(page_text)
-            
+
             for station in stations:
                 station["source_pdf"] = file_name
                 station["page_no"] = page["page"]
                 results.append(station)
-            
-            df = pd.DataFrame(results)
-            
-            if df.empty:
-                df = pd.DataFrame(columns=[
-                    "rule_type",
-                    "threshold_value",
-                    "units",
-                    "source_text",
-                    "source_pdf",
-                    "page_no"
-                ])
-            
-            df.to_excel(OUTPUT_FILE, index=False)
-            print(f"Saved output to {OUTPUT_FILE} with {len(df)} row(s)")
+
+# Save only once, after all PDFs/pages are processed
+df = pd.DataFrame(results)
+
+if df.empty:
+    df = pd.DataFrame(columns=[
+        "rule_type",
+        "threshold_value",
+        "units",
+        "station_id",
+        "source_text",
+        "source_pdf",
+        "page_no"
+    ])
+
+df.to_excel(OUTPUT_FILE, index=False)
+print(f"Final output saved to {OUTPUT_FILE} with {len(df)} row(s)")
