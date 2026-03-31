@@ -40,18 +40,30 @@ def extract_no_diversion_rules(text):
     pattern = r'(\d+(?:\.\d+)?)\s*cubic\s*meters?\s*per\s*second'
 
     for match in re.finditer(pattern, text, re.IGNORECASE):
-        value = float(match.group(1))
+       value = float(match.group(1))
 
-        # crude first-pass rule classification by value
+        # Assign river
         if value in [0, 0.16, 0.5]:
             river = "Blindman River"
         elif value == 16:
             river = "Red Deer River"
         else:
             river = None
-
+        
+        # Assign rule meaning
+        if value == 0:
+            rule_type = "no_diversion"
+        elif value == 0.16:
+            rule_type = "instream_objective"
+        elif value == 0.5:
+            rule_type = "flow_threshold"
+        elif value == 16:
+            rule_type = "water_conservation_objective"
+        else:
+            rule_type = "unknown"
+        
         results.append({
-            "rule_type": "flow_rule_candidate",
+            "rule_type": rule_type,
             "threshold_value": value,
             "units": "m3/s",
             "river": river,
