@@ -97,3 +97,25 @@ def extract_station_references(text):
         })
 
     return results
+
+def extract_percent_rules(text):
+    import re
+
+    results = []
+
+    if not text:
+        return results
+
+    pattern = r'(\d+)%\s+of the rate of flow'
+
+    for match in re.finditer(pattern, text):
+        percent = int(match.group(1))
+
+        results.append({
+            "rule_type": "percent_diversion",
+            "percent": percent,
+            "river": "Blindman River",  # safe assumption for now
+            "source_text": text[:1500]
+        })
+
+    return results
