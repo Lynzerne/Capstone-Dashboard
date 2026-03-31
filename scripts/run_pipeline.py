@@ -1,5 +1,9 @@
 import os
+import sys
 import pandas as pd
+
+# Add the repo root to Python's import path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.extract_text import extract_pdf_text
 from src.parse_rules import extract_no_diversion_rules
