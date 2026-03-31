@@ -57,7 +57,11 @@ for flow in flow_rows:
         if flow.get("source_pdf") != station.get("source_pdf"):
             continue
 
-        if flow.get("page_no") != station.get("page_no"):
+        # allow matching within same PDF + same river
+        if flow.get("source_pdf") != station.get("source_pdf"):
+            continue
+        
+        if flow.get("river") != station.get("river"):
             continue
 
         if flow.get("river") != station.get("river"):
