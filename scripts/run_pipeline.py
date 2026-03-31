@@ -33,6 +33,7 @@ for file_name in os.listdir(PDF_FOLDER):
 
             rules = extract_no_diversion_rules(page_text)
             stations = extract_station_references(page_text)
+            percent_rules = extract_percent_rules(page_text)
 
             print(
                 f"Page {page['page']}: "
@@ -49,6 +50,11 @@ for file_name in os.listdir(PDF_FOLDER):
                 station["source_pdf"] = file_name
                 station["page_no"] = page["page"]
                 results.append(station)
+
+            for pr in percent_rules:
+                pr["source_pdf"] = file_name
+                pr["page_no"] = page["page"]
+                results.append(pr)
 
 print(f"DEBUG total raw results: {len(results)}")
 
