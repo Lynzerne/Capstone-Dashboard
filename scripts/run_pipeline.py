@@ -52,21 +52,29 @@ combined_rows = []
 flow_rows = [r for r in results if r.get("rule_type") == "flow_rule_candidate"]
 station_rows = [r for r in results if r.get("rule_type") == "station_reference"]
 
+combined_rows = []
+
+flow_rows = [r for r in results if r.get("rule_type") == "flow_rule_candidate"]
+station_rows = [r for r in results if r.get("rule_type") == "station_reference"]
+
 for flow in flow_rows:
     for station in station_rows:
         if (
             flow.get("source_pdf") == station.get("source_pdf")
             and flow.get("page_no") == station.get("page_no")
         ):
-            combined_rows.append({
-                "rule_type": "combined_rule",
-                "threshold_value": flow.get("threshold_value"),
-                "units": flow.get("units"),
-                "station_id": station.get("station_id"),
-                "source_text": flow.get("source_text"),
-                "source_pdf": flow.get("source_pdf"),
-                "page_no": flow.get("page_no")
-            })
+            # ✅ NEW: only join if river matches OR one is unknown
+            if flow.get("river") == station.get("river") or flow.get("river") is None:
+                combined_rows.append({
+                    "rule_type": "combined_rule",
+                    "threshold_value": flow.get("threshold_value"),
+                    "units": flow.get("units"),
+                    "station_id": station.get("station_id"),
+                    "river": flow.get("river"),
+                    "source_text": flow.get("source_text"),
+                    "source_pdf": flow.get("source_pdf"),
+                    "page_no": flow.get("page_no")
+                })
 
 # Step 3: Save output once, at the end
 df = pd.DataFrame(combined_rows)
