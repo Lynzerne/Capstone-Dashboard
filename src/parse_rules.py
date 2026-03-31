@@ -40,7 +40,7 @@ def extract_no_diversion_rules(text):
     pattern = r'(\d+(?:\.\d+)?)\s*cubic\s*meters?\s*per\s*second'
 
     for match in re.finditer(pattern, text, re.IGNORECASE):
-       value = float(match.group(1))
+        value = float(match.group(1))
 
         # Assign river
         if value in [0, 0.16, 0.5]:
@@ -49,7 +49,7 @@ def extract_no_diversion_rules(text):
             river = "Red Deer River"
         else:
             river = None
-        
+
         # Assign rule meaning
         if value == 0:
             rule_type = "no_diversion"
@@ -61,7 +61,7 @@ def extract_no_diversion_rules(text):
             rule_type = "water_conservation_objective"
         else:
             rule_type = "unknown"
-        
+
         results.append({
             "rule_type": rule_type,
             "threshold_value": value,
