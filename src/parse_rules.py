@@ -9,26 +9,25 @@ def extract_no_diversion_rules(text):
 
     text_lower = text.lower()
 
-    trigger_phrases = [
-        "no diversion",
-        "not divert",
-        "shall not divert",
-        "instream objective",
-        "diversion table"
-    ]
+    pattern = r'(\d+(?:\.\d+)?)\s*cubic\s*meters?\s*per\s*second'
 
-    if any(phrase in text_lower for phrase in trigger_phrases):
-        pattern = r'(\d+(?:\.\d+)?)\s*cubic\s*meters?\s*per\s*second'
+    for match in re.finditer(pattern, text, re.IGNORECASE):
+        value = float(match.group(1))
 
-        for match in re.finditer(pattern, text, re.IGNORECASE):
-            value = float(match.group(1))
+        river = None
 
-            results.append({
-                "rule_type": "flow_rule_candidate",
-                "threshold_value": value,
-                "units": "m3/s",
-                "source_text": text[:1500]
-            })
+        if "blindman river" in text_lower:
+            river = "Blindman River"
+        elif "red deer river" in text_lower:
+            river = "Red Deer River"
+
+        results.append({
+            "rule_type": "flow_rule_candidate",
+            "threshold_value": value,
+            "units": "m3/s",
+            "river": river,
+            "source_text": text[:1500]
+        })
 
     return results
 
