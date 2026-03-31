@@ -41,9 +41,19 @@ def extract_station_references(text):
     pattern = r'\b05[A-Z0-9]{5}\b'
 
     for match in re.finditer(pattern, text):
+        station_id = match.group(0)
+
+        river = None
+
+        if "blindman river" in text.lower():
+            river = "Blindman River"
+        elif "red deer river" in text.lower():
+            river = "Red Deer River"
+
         results.append({
             "rule_type": "station_reference",
-            "station_id": match.group(0),
+            "station_id": station_id,
+            "river": river,
             "source_text": text[:1500]
         })
 
