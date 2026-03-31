@@ -12,6 +12,7 @@ OUTPUT_FILE = "data/outputs/extracted_rules.xlsx"
 
 results = []
 
+# Step 1: Extract raw pieces from each PDF
 for file_name in os.listdir(PDF_FOLDER):
     if file_name.lower().endswith(".pdf"):
         file_path = os.path.join(PDF_FOLDER, file_name)
@@ -45,8 +46,30 @@ for file_name in os.listdir(PDF_FOLDER):
                 station["page_no"] = page["page"]
                 results.append(station)
 
-# Save only once, after all PDFs/pages are processed
-df = pd.DataFrame(results)
+# Step 2: Join flow rules to station references by page number
+combined_rows = []
+
+flow_rows = [r for r in results if r.get("rule_type") == "flow_rule_candidate"]
+station_rows = [r for r in results if r.get("rule_type") == "station_reference"]
+
+for flow in flow_rows:
+    for station in station_rows:
+        if (
+            flow.get("source_pdf") == station.get("source_pdf")
+            and flow.get("page_no") == station.get("page_no")
+        ):
+            combined_rows.append({
+                "rule_type": "combined_rule",
+                "threshold_value": flow.get("threshold_value"),
+                "units": flow.get("units"),
+                "station_id": station.get("station_id"),
+                "source_text": flow.get("source_text"),
+                "source_pdf": flow.get("source_pdf"),
+                "page_no": flow.get("page_no")
+            })
+
+# Step 3: Save output once, at the end
+df = pd.DataFrame(combined_rows)
 
 if df.empty:
     df = pd.DataFrame(columns=[
