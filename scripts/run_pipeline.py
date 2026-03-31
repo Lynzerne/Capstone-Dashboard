@@ -62,7 +62,8 @@ flow_rule_types = {
     "no_diversion",
     "instream_objective",
     "flow_threshold",
-    "water_conservation_objective"
+    "water_conservation_objective",
+    "percent_diversion"
 }
 
 flow_rows = [r for r in results if r.get("rule_type") in flow_rule_types]
@@ -99,6 +100,7 @@ for flow in flow_rows:
             "rule_type": flow.get("rule_type"),
             "river": flow.get("river"),
             "threshold_value": flow.get("threshold_value"),
+            "percent": flow.get("percent"),
             "units": flow.get("units"),
             "station_id": station.get("station_id"),
             "station_name": station.get("station_name"),
