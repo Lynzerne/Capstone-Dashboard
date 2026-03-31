@@ -6,20 +6,28 @@ def extract_no_diversion_rules(text):
     if not text:
         return results
 
-    pattern = r'(\d+\.\d+)\s*cubic meters per second'
+    text_lower = text.lower()
 
-    matches = re.finditer(pattern, text, re.IGNORECASE)
+    # Trigger only on pages that look relevant
+    trigger_phrases = [
+        "no diversion",
+        "not divert",
+        "shall not divert",
+        "instream objective",
+        "diversion table"
+    ]
 
-    for match in matches:
-        value = float(match.group(1))
-        window = text[max(0, match.start()-120):match.end()+120].lower()
+    if any(phrase in text_lower for phrase in trigger_phrases):
+        pattern = r'(\d+(?:\.\d+)?)\s*cubic\s*meters?\s*per\s*second'
 
-        if "not divert" in window or "no diversion" in window:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            value = float(match.group(1))
+
             results.append({
-                "rule_type": "no diversion",
+                "rule_type": "flow_rule_candidate",
                 "threshold_value": value,
                 "units": "m3/s",
-                "source_text": window
+                "source_text": text[:1500]
             })
 
     return results
