@@ -301,47 +301,41 @@ def extract_seasonal_rules(text):
         station_ids = find_station_ids(section)
         condition_type = classify_seasonal_condition(section)
 
-        found_any = False
+        # Priority 1: explicit date range
+        date_matches = list(re.finditer(date_range_pattern, section, re.IGNORECASE))
 
-        for match in re.finditer(date_range_pattern, section, re.IGNORECASE):
-            start_month = match.group(1)
-            start_day = int(match.group(2))
-            end_month = match.group(3)
-            end_day = int(match.group(4))
+        if date_matches:
+            for match in date_matches:
+                start_month = match.group(1)
+                start_day = int(match.group(2))
+                end_month = match.group(3)
+                end_day = int(match.group(4))
 
-            results.append({
-                "rule_type": "seasonal_window",
-                "condition_type": condition_type,
-                "season_type": "date_range",
-                "start_month": start_month.title(),
-                "start_day": start_day,
-                "end_month": end_month.title(),
-                "end_day": end_day,
-                "river": river,
-                "station_ids_found": station_ids,
-                "source_text": section[:1500]
-            })
-            found_any = True
-
-        for season_name, pattern in SEASON_PATTERNS.items():
-            if re.search(pattern, section, re.IGNORECASE):
                 results.append({
                     "rule_type": "seasonal_window",
                     "condition_type": condition_type,
-                    "season_type": season_name,
+                    "season_type": "date_range",
+                    "start_month": start_month.title(),
+                    "start_day": start_day,
+                    "end_month": end_month.title(),
+                    "end_day": end_day,
                     "river": river,
                     "station_ids_found": station_ids,
                     "source_text": section[:1500]
                 })
-                found_any = True
 
-        if found_any and re.search(r"\bshall\b|\bmust\b|\bonly\b|\bnot\b|\bprohibited\b", section, re.IGNORECASE):
-            results.append({
-                "rule_type": "seasonal_condition_text",
-                "condition_type": condition_type,
-                "river": river,
-                "station_ids_found": station_ids,
-                "source_text": section[:1500]
-            })
+        # Priority 2: named season only if no date range found
+        else:
+            for season_name, pattern in SEASON_PATTERNS.items():
+                if re.search(pattern, section, re.IGNORECASE):
+                    results.append({
+                        "rule_type": "seasonal_window",
+                        "condition_type": condition_type,
+                        "season_type": season_name,
+                        "river": river,
+                        "station_ids_found": station_ids,
+                        "source_text": section[:1500]
+                    })
+                    break
 
     return results
