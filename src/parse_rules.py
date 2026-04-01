@@ -17,6 +17,26 @@ STATION_LOOKUP = {
 }
 
 
+STATION_PATTERNS = {
+    "05CC001": [
+        r"\b05CC001\b",
+        r"\bblindman river near blackfalds\b",
+        r"\bblindman near blackfalds\b"
+    ],
+    "05CC002": [
+        r"\b05CC002\b",
+        r"\bred deer river at red deer\b",
+        r"\bred deer at red deer\b"
+    ],
+    "05CB007": [
+        r"\b05CB007\b",
+        r"\bdickson dam tunnel outlet\b",
+        r"\bdickson dam\b",
+        r"\btunnel outlet\b"
+    ]
+}
+
+
 RIVER_PATTERNS = {
     "Blindman": [
         r"\bblindman\b",
@@ -77,10 +97,32 @@ def split_into_sections(text):
 
 
 def find_station_ids(text):
+    """
+    Find station IDs from either:
+    1. explicit station codes like 05CC002
+    2. station name phrases like 'Dickson Dam Tunnel Outlet'
+    """
     if not text:
         return []
 
-    return re.findall(r"\b05[A-Z0-9]{5}\b", text)
+    found_ids = set()
+
+    # explicit station IDs
+    explicit_ids = re.findall(r"\b05[A-Z0-9]{5}\b", text, re.IGNORECASE)
+    for station_id in explicit_ids:
+        station_id = station_id.upper()
+        if station_id in STATION_LOOKUP:
+            found_ids.add(station_id)
+
+    # station name patterns
+    text_lower = text.lower()
+    for station_id, patterns in STATION_PATTERNS.items():
+        for pattern in patterns:
+            if re.search(pattern, text_lower, re.IGNORECASE):
+                found_ids.add(station_id)
+                break
+
+    return sorted(found_ids)
 
 
 def infer_river_from_text(text):
