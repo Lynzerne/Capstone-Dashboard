@@ -8,7 +8,8 @@ from src.extract_text import extract_pdf_text
 from src.parse_rules import (
     extract_no_diversion_rules,
     extract_station_references,
-    extract_percent_rules
+    extract_percent_rules,
+    extract_seasonal_rules
 )
 
 PDF_FOLDER = "data/raw_pdfs"
@@ -34,11 +35,14 @@ for file_name in os.listdir(PDF_FOLDER):
             rules = extract_no_diversion_rules(page_text)
             stations = extract_station_references(page_text)
             percent_rules = extract_percent_rules(page_text)
+            seasonal_rules = extract_seasonal_rules(page_text)
 
             print(
                 f"Page {page['page']}: "
                 f"{len(rules)} flow rule(s), "
-                f"{len(stations)} station reference(s)"
+                f"{len(stations)} station reference(s), "
+                f"{len(percent_rules)} percent rule(s), "
+                f"{len(seasonal_rules)} seasonal rule(s)"
             )
 
             for rule in rules:
@@ -56,6 +60,12 @@ for file_name in os.listdir(PDF_FOLDER):
                 pr["page_no"] = page["page"]
                 results.append(pr)
 
+            for sr in seasonal_rules:
+                sr["source_pdf"] = file_name
+                sr["page_no"] = page["page"]
+                results.append(sr)
+                
+
 print(f"DEBUG total raw results: {len(results)}")
 
 flow_rule_types = {
@@ -63,9 +73,10 @@ flow_rule_types = {
     "instream_objective",
     "flow_threshold",
     "water_conservation_objective",
-    "percent_diversion"
+    "percent_diversion",
+    "seasonal_window",
+    "seasonal_condition_text"
 }
-
 flow_rows = [r for r in results if r.get("rule_type") in flow_rule_types]
 station_rows = [r for r in results if r.get("rule_type") == "station_reference"]
 
@@ -98,6 +109,12 @@ for flow in flow_rows:
 
         combined_rows.append({
             "rule_type": flow.get("rule_type"),
+            "condition_type": flow.get("condition_type"),
+            "season_type": flow.get("season_type"),
+            "start_month": flow.get("start_month"),
+            "start_day": flow.get("start_day"),
+            "end_month": flow.get("end_month"),
+            "end_day": flow.get("end_day"),
             "river": flow.get("river"),
             "threshold_value": flow.get("threshold_value"),
             "percent": flow.get("percent"),
@@ -119,11 +136,17 @@ if not df.empty:
 
 print(f"DEBUG final rows after dedupe: {len(df)}")
 
-if df.empty:
     df = pd.DataFrame(columns=[
         "rule_type",
+        "condition_type",
+        "season_type",
+        "start_month",
+        "start_day",
+        "end_month",
+        "end_day",
         "river",
         "threshold_value",
+        "percent",
         "units",
         "station_id",
         "station_name",
