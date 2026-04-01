@@ -321,7 +321,7 @@ def extract_temperature_rules(text):
     - monitoring period (June 1 to October 1)
     - maximum temperature cutoff (22 C)
     - baseline trigger (19 C)
-    - monitoring frequency (hourly / daily)
+    - monitoring frequency (hourly / daily) with condition text
     """
     results = []
 
@@ -334,8 +334,7 @@ def extract_temperature_rules(text):
     if "temperature" not in text_lower:
         return results
 
-    # Treat temperature rules as source-water / POD logic, not Red Deer WCO station logic.
-    # For this licence, that source is Blindman River.
+    # For this licence, temperature rules apply to the source water / POD logic
     river = "Blindman"
 
     date_range_pattern = (
@@ -347,7 +346,6 @@ def extract_temperature_rules(text):
         rf"(?:st|nd|rd|th)?\b"
     )
 
-    # Handles 22o C, 22°C, 22 C, 19o C, etc.
     celsius_pattern = r'(\d+(?:\.\d+)?)\s*(?:°|o)?\s*[cC]\b'
 
     # Monitoring period
@@ -387,12 +385,13 @@ def extract_temperature_rules(text):
             "source_text": text[:1500]
         })
 
-    # Monitoring frequencies within temperature text only
+    # Monitoring frequencies with condition text
     if re.search(r"\bhourly\b", text_norm, re.IGNORECASE):
         results.append({
             "rule_type": "temperature_rule",
             "temperature_rule_type": "temperature_monitoring_frequency",
             "frequency": "hourly",
+            "frequency_condition": "baseline temperature > 19 C",
             "river": river,
             "station_ids_found": [],
             "source_text": text[:1500]
@@ -403,6 +402,7 @@ def extract_temperature_rules(text):
             "rule_type": "temperature_rule",
             "temperature_rule_type": "temperature_monitoring_frequency",
             "frequency": "daily",
+            "frequency_condition": "previous temperature measurement < 19 C",
             "river": river,
             "station_ids_found": [],
             "source_text": text[:1500]
