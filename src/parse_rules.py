@@ -62,7 +62,8 @@ SEASON_PATTERNS = {
     "fall": r"\bfall\b|\bautumn\b",
     "winter": r"\bwinter\b",
     "ice_free_season": r"\bice[- ]?free season\b",
-    "open_water_season": r"\bopen water season\b"
+    "open_water_season": r"\bopen water season\b",
+    "winter_ice_cover_season": r"\bwinter ice cover season\b"
 }
 
 
@@ -107,14 +108,12 @@ def find_station_ids(text):
 
     found_ids = set()
 
-    # explicit station IDs
     explicit_ids = re.findall(r"\b05[A-Z0-9]{5}\b", text, re.IGNORECASE)
     for station_id in explicit_ids:
         station_id = station_id.upper()
         if station_id in STATION_LOOKUP:
             found_ids.add(station_id)
 
-    # station name patterns
     text_lower = text.lower()
     for station_id, patterns in STATION_PATTERNS.items():
         for pattern in patterns:
@@ -285,9 +284,9 @@ def extract_percent_rules(text):
 
     sections = split_into_sections(text)
 
-    for i, section in enumerate(sections):
-        pattern = r'(\d+)%\s+of the rate of flow'
+    pattern = r'(\d+)%\s+of the rate of flow'
 
+    for i, section in enumerate(sections):
         for match in re.finditer(pattern, section, re.IGNORECASE):
             percent = int(match.group(1))
             river = infer_river_with_context(sections, i)
@@ -304,6 +303,10 @@ def extract_percent_rules(text):
 
 
 def extract_seasonal_rules(text):
+    """
+    Extract true seasonal station applicability rules only.
+    Do NOT capture temperature date windows here.
+    """
     results = []
 
     if not text:
@@ -311,19 +314,7 @@ def extract_seasonal_rules(text):
 
     sections = split_into_sections(text)
 
-    date_range_pattern = (
-        rf"\b(?:between|from|during|for)?\s*"
-        rf"({MONTH_PATTERN})\s+(\d{{1,2}})"
-        rf"(?:st|nd|rd|th)?"
-        rf"\s*(?:,)?\s*(?:and|to|through|-)\s*"
-        rf"({MONTH_PATTERN})\s+(\d{{1,2}})"
-        rf"(?:st|nd|rd|th)?\b"
-    )
-
     seasonal_trigger_phrases = [
-        "between",
-        "from",
-        "during",
         "season",
         "spring",
         "summer",
@@ -345,27 +336,26 @@ def extract_seasonal_rules(text):
         station_ids = find_station_ids(section)
         condition_type = classify_seasonal_condition(section)
 
-        date_matches = list(re.finditer(date_range_pattern, section, re.IGNORECASE))
+        if re.search(r"\bopen water season\b", section, re.IGNORECASE):
+            results.append({
+                "rule_type": "seasonal_window",
+                "condition_type": condition_type,
+                "season_type": "open_water_season",
+                "river": river,
+                "station_ids_found": station_ids,
+                "source_text": section[:1500]
+            })
 
-        if date_matches:
-            for match in date_matches:
-                start_month = match.group(1)
-                start_day = int(match.group(2))
-                end_month = match.group(3)
-                end_day = int(match.group(4))
+        elif re.search(r"\bwinter ice cover season\b", section, re.IGNORECASE):
+            results.append({
+                "rule_type": "seasonal_window",
+                "condition_type": condition_type,
+                "season_type": "winter_ice_cover_season",
+                "river": river,
+                "station_ids_found": station_ids,
+                "source_text": section[:1500]
+            })
 
-                results.append({
-                    "rule_type": "seasonal_window",
-                    "condition_type": condition_type,
-                    "season_type": "date_range",
-                    "start_month": start_month.title(),
-                    "start_day": start_day,
-                    "end_month": end_month.title(),
-                    "end_day": end_day,
-                    "river": river,
-                    "station_ids_found": station_ids,
-                    "source_text": section[:1500]
-                })
         else:
             for season_name, pattern in SEASON_PATTERNS.items():
                 if re.search(pattern, section, re.IGNORECASE):
@@ -378,5 +368,105 @@ def extract_seasonal_rules(text):
                         "source_text": section[:1500]
                     })
                     break
+
+    return results
+
+
+def extract_temperature_rules(text):
+    """
+    Extract temperature-related rules, including:
+    - hard stop threshold (e.g. > 22 C)
+    - monitoring date window (e.g. June 1 to October 1)
+    - baseline trigger (e.g. > 19 C)
+    - monitoring frequency (hourly, daily)
+    """
+    results = []
+
+    if not text:
+        return results
+
+    sections = split_into_sections(text)
+
+    date_range_pattern = (
+        rf"\b(?:between|from|during|for)?\s*"
+        rf"({MONTH_PATTERN})\s+(\d{{1,2}})"
+        rf"(?:st|nd|rd|th)?"
+        rf"\s*(?:,)?\s*(?:and|to|through|-)\s*"
+        rf"({MONTH_PATTERN})\s+(\d{{1,2}})"
+        rf"(?:st|nd|rd|th)?\b"
+    )
+
+    celsius_pattern = r'(\d+(?:\.\d+)?)\s*(?:o\s*)?[cC]\b'
+    frequency_patterns = {
+        "hourly": r"\bhourly\b",
+        "daily": r"\bdaily\b",
+        "weekly": r"\bweekly\b",
+        "bi-weekly": r"\bbi-?weekly\b"
+    }
+
+    trigger_phrases = [
+        "temperature",
+        "baseline temperature",
+        "measure the temperature",
+        "water temperature",
+        "exceeds",
+        "hourly",
+        "daily"
+    ]
+
+    for i, section in enumerate(sections):
+        section_lower = section.lower()
+
+        if not any(phrase in section_lower for phrase in trigger_phrases):
+            continue
+
+        river = infer_river_with_context(sections, i)
+        station_ids = find_station_ids(section)
+
+        # Date window
+        for match in re.finditer(date_range_pattern, section, re.IGNORECASE):
+            results.append({
+                "rule_type": "temperature_window",
+                "temperature_rule_type": "monitoring_period",
+                "start_month": match.group(1).title(),
+                "start_day": int(match.group(2)),
+                "end_month": match.group(3).title(),
+                "end_day": int(match.group(4)),
+                "river": river,
+                "station_ids_found": station_ids,
+                "source_text": section[:1500]
+            })
+
+        # Temperature thresholds
+        temp_values = [float(m.group(1)) for m in re.finditer(celsius_pattern, section)]
+        for value in temp_values:
+            temp_rule_type = "temperature_threshold"
+
+            if "exceeds" in section_lower or "shall not divert" in section_lower:
+                temp_rule_type = "temperature_maximum"
+            elif "baseline temperature" in section_lower:
+                temp_rule_type = "baseline_temperature_trigger"
+
+            results.append({
+                "rule_type": "temperature_rule",
+                "temperature_rule_type": temp_rule_type,
+                "temperature_c": value,
+                "units": "C",
+                "river": river,
+                "station_ids_found": station_ids,
+                "source_text": section[:1500]
+            })
+
+        # Monitoring frequencies
+        for freq_name, pattern in frequency_patterns.items():
+            if re.search(pattern, section, re.IGNORECASE):
+                results.append({
+                    "rule_type": "temperature_rule",
+                    "temperature_rule_type": "temperature_monitoring_frequency",
+                    "frequency": freq_name,
+                    "river": river,
+                    "station_ids_found": station_ids,
+                    "source_text": section[:1500]
+                })
 
     return results
