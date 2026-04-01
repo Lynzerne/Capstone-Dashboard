@@ -113,8 +113,7 @@ combined_rows = []
 for flow in flow_rows:
     flow_station_ids = flow.get("station_ids_found") or []
 
-    # Temperature rules should not be duplicated across stations when they do not
-    # explicitly name a station. Keep them as standalone rows.
+    # Temperature rules should stay standalone unless they explicitly name a station
     if flow.get("rule_type") in temperature_rule_types and not flow_station_ids:
         combined_rows.append({
             "rule_type": flow.get("rule_type"),
@@ -130,6 +129,7 @@ for flow in flow_rows:
             "temperature_c": flow.get("temperature_c"),
             "percent": flow.get("percent"),
             "frequency": flow.get("frequency"),
+            "frequency_condition": flow.get("frequency_condition"),
             "units": flow.get("units"),
             "station_id": None,
             "station_name": None,
@@ -169,6 +169,7 @@ for flow in flow_rows:
             "temperature_c": flow.get("temperature_c"),
             "percent": flow.get("percent"),
             "frequency": flow.get("frequency"),
+            "frequency_condition": flow.get("frequency_condition"),
             "units": flow.get("units"),
             "station_id": station.get("station_id"),
             "station_name": station.get("station_name"),
@@ -197,6 +198,7 @@ if not df.empty:
         "temperature_c",
         "percent",
         "frequency",
+        "frequency_condition",
         "units",
         "station_id",
         "source_pdf",
@@ -220,6 +222,7 @@ if df.empty:
         "temperature_c",
         "percent",
         "frequency",
+        "frequency_condition",
         "units",
         "station_id",
         "station_name",
