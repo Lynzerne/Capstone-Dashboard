@@ -103,9 +103,6 @@ for flow in flow_rows:
         if flow.get("source_pdf") != station.get("source_pdf"):
             continue
 
-        if flow.get("page_no") != station.get("page_no"):
-            continue
-
         if flow_station_ids:
             if station.get("station_id") not in flow_station_ids:
                 continue
