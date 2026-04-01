@@ -283,7 +283,6 @@ def extract_percent_rules(text):
         return results
 
     sections = split_into_sections(text)
-
     pattern = r'(\d+)%\s+of the rate of flow'
 
     for i, section in enumerate(sections):
@@ -305,7 +304,9 @@ def extract_percent_rules(text):
 def extract_seasonal_rules(text):
     """
     Extract true seasonal station applicability rules only.
-    Do NOT capture temperature date windows here.
+    This is specifically for clauses like:
+      (a) Station 05CC002 ... during the open water season; or
+      (b) Station 05CB007 ... during the winter ice cover season;
     """
     results = []
 
@@ -314,71 +315,77 @@ def extract_seasonal_rules(text):
 
     sections = split_into_sections(text)
 
-    seasonal_trigger_phrases = [
-        "season",
-        "spring",
-        "summer",
-        "fall",
-        "autumn",
-        "winter",
-        "ice-free",
-        "ice free",
-        "open water"
-    ]
-
     for i, section in enumerate(sections):
         section_lower = section.lower()
 
-        if not any(phrase in section_lower for phrase in seasonal_trigger_phrases):
+        if "season" not in section_lower:
             continue
 
         river = infer_river_with_context(sections, i)
-        station_ids = find_station_ids(section)
-        condition_type = classify_seasonal_condition(section)
 
-        if re.search(r"\bopen water season\b", section, re.IGNORECASE):
-            results.append({
-                "rule_type": "seasonal_window",
-                "condition_type": condition_type,
-                "season_type": "open_water_season",
-                "river": river,
-                "station_ids_found": station_ids,
-                "source_text": section[:1500]
-            })
+        station_season_patterns = [
+            (
+                r"(?:station\s+)?05CC002\b.*?(?:red deer river at red deer)?.*?during the open water season",
+                "05CC002",
+                "open_water_season"
+            ),
+            (
+                r"(?:station\s+)?05CB007\b.*?(?:dickson dam tunnel outlet)?.*?during the winter ice cover season",
+                "05CB007",
+                "winter_ice_cover_season"
+            ),
+            (
+                r"(?:station\s+)?05CC001\b.*?(?:blindman river near blackfalds)?.*?during the open water season",
+                "05CC001",
+                "open_water_season"
+            ),
+        ]
 
-        elif re.search(r"\bwinter ice cover season\b", section, re.IGNORECASE):
-            results.append({
-                "rule_type": "seasonal_window",
-                "condition_type": condition_type,
-                "season_type": "winter_ice_cover_season",
-                "river": river,
-                "station_ids_found": station_ids,
-                "source_text": section[:1500]
-            })
+        found_any = False
 
-        else:
-            for season_name, pattern in SEASON_PATTERNS.items():
-                if re.search(pattern, section, re.IGNORECASE):
-                    results.append({
-                        "rule_type": "seasonal_window",
-                        "condition_type": condition_type,
-                        "season_type": season_name,
-                        "river": river,
-                        "station_ids_found": station_ids,
-                        "source_text": section[:1500]
-                    })
-                    break
+        for pattern, station_id, season_type in station_season_patterns:
+            if re.search(pattern, section, re.IGNORECASE | re.DOTALL):
+                results.append({
+                    "rule_type": "seasonal_window",
+                    "condition_type": "seasonal_station_applicability",
+                    "season_type": season_type,
+                    "river": STATION_LOOKUP.get(station_id, {}).get("river", river),
+                    "station_ids_found": [station_id],
+                    "source_text": section[:1500]
+                })
+                found_any = True
+
+        if not found_any:
+            if re.search(r"\bopen water season\b", section, re.IGNORECASE):
+                results.append({
+                    "rule_type": "seasonal_window",
+                    "condition_type": "seasonal_station_applicability",
+                    "season_type": "open_water_season",
+                    "river": river,
+                    "station_ids_found": find_station_ids(section),
+                    "source_text": section[:1500]
+                })
+            elif re.search(r"\bwinter ice cover season\b", section, re.IGNORECASE):
+                results.append({
+                    "rule_type": "seasonal_window",
+                    "condition_type": "seasonal_station_applicability",
+                    "season_type": "winter_ice_cover_season",
+                    "river": river,
+                    "station_ids_found": find_station_ids(section),
+                    "source_text": section[:1500]
+                })
 
     return results
 
 
 def extract_temperature_rules(text):
     """
-    Extract temperature-related rules, including:
-    - hard stop threshold (e.g. > 22 C)
-    - monitoring date window (e.g. June 1 to October 1)
-    - baseline trigger (e.g. > 19 C)
-    - monitoring frequency (hourly, daily)
+    Extract temperature-related rules only from sections that explicitly mention temperature.
+    Captures:
+    - monitoring period (June 1 to October 1)
+    - maximum temperature cutoff (22 C)
+    - baseline trigger (19 C)
+    - monitoring frequency (hourly / daily) only within temperature sections
     """
     results = []
 
@@ -397,33 +404,16 @@ def extract_temperature_rules(text):
     )
 
     celsius_pattern = r'(\d+(?:\.\d+)?)\s*(?:o\s*)?[cC]\b'
-    frequency_patterns = {
-        "hourly": r"\bhourly\b",
-        "daily": r"\bdaily\b",
-        "weekly": r"\bweekly\b",
-        "bi-weekly": r"\bbi-?weekly\b"
-    }
-
-    trigger_phrases = [
-        "temperature",
-        "baseline temperature",
-        "measure the temperature",
-        "water temperature",
-        "exceeds",
-        "hourly",
-        "daily"
-    ]
 
     for i, section in enumerate(sections):
         section_lower = section.lower()
 
-        if not any(phrase in section_lower for phrase in trigger_phrases):
+        if "temperature" not in section_lower:
             continue
 
         river = infer_river_with_context(sections, i)
         station_ids = find_station_ids(section)
 
-        # Date window
         for match in re.finditer(date_range_pattern, section, re.IGNORECASE):
             results.append({
                 "rule_type": "temperature_window",
@@ -437,15 +427,17 @@ def extract_temperature_rules(text):
                 "source_text": section[:1500]
             })
 
-        # Temperature thresholds
-        temp_values = [float(m.group(1)) for m in re.finditer(celsius_pattern, section)]
-        for value in temp_values:
-            temp_rule_type = "temperature_threshold"
+        for match in re.finditer(celsius_pattern, section):
+            value = float(match.group(1))
 
-            if "exceeds" in section_lower or "shall not divert" in section_lower:
+            if value == 22 or (
+                "shall not divert" in section_lower and "exceeds" in section_lower and value >= 22
+            ):
                 temp_rule_type = "temperature_maximum"
-            elif "baseline temperature" in section_lower:
+            elif value == 19 or "baseline temperature" in section_lower:
                 temp_rule_type = "baseline_temperature_trigger"
+            else:
+                temp_rule_type = "temperature_threshold"
 
             results.append({
                 "rule_type": "temperature_rule",
@@ -457,16 +449,24 @@ def extract_temperature_rules(text):
                 "source_text": section[:1500]
             })
 
-        # Monitoring frequencies
-        for freq_name, pattern in frequency_patterns.items():
-            if re.search(pattern, section, re.IGNORECASE):
-                results.append({
-                    "rule_type": "temperature_rule",
-                    "temperature_rule_type": "temperature_monitoring_frequency",
-                    "frequency": freq_name,
-                    "river": river,
-                    "station_ids_found": station_ids,
-                    "source_text": section[:1500]
-                })
+        if re.search(r"\bhourly\b", section, re.IGNORECASE):
+            results.append({
+                "rule_type": "temperature_rule",
+                "temperature_rule_type": "temperature_monitoring_frequency",
+                "frequency": "hourly",
+                "river": river,
+                "station_ids_found": station_ids,
+                "source_text": section[:1500]
+            })
+
+        if re.search(r"\bdaily\b", section, re.IGNORECASE):
+            results.append({
+                "rule_type": "temperature_rule",
+                "temperature_rule_type": "temperature_monitoring_frequency",
+                "frequency": "daily",
+                "river": river,
+                "station_ids_found": station_ids,
+                "source_text": section[:1500]
+            })
 
     return results
