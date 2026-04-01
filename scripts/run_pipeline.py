@@ -97,15 +97,24 @@ if station_rows:
 combined_rows = []
 
 for flow in flow_rows:
+    flow_station_ids = flow.get("station_ids_found") or []
+
     for station in station_rows:
         if flow.get("source_pdf") != station.get("source_pdf"):
             continue
 
-        if flow.get("river") != station.get("river"):
+        if flow.get("page_no") != station.get("page_no"):
             continue
 
-        if flow.get("river") is None or station.get("river") is None:
-            continue
+        if flow_station_ids:
+            if station.get("station_id") not in flow_station_ids:
+                continue
+        else:
+            if flow.get("river") != station.get("river"):
+                continue
+
+            if flow.get("river") is None or station.get("river") is None:
+                continue
 
         combined_rows.append({
             "rule_type": flow.get("rule_type"),
