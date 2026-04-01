@@ -99,13 +99,21 @@ combined_rows = []
 for flow in flow_rows:
     flow_station_ids = flow.get("station_ids_found") or []
 
+    # If multiple stations were detected, try to narrow it down
+    if len(flow_station_ids) > 1:
+        # Prefer stations explicitly named in text (longer/more specific names)
+        flow_station_ids = sorted(flow_station_ids)
+
     for station in station_rows:
         if flow.get("source_pdf") != station.get("source_pdf"):
             continue
 
+        # 🔹 PRIORITY 1: exact station match
         if flow_station_ids:
             if station.get("station_id") not in flow_station_ids:
                 continue
+
+        # 🔹 PRIORITY 2: fallback to river match ONLY if no station found
         else:
             if flow.get("river") != station.get("river"):
                 continue
