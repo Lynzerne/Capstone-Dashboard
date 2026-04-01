@@ -86,6 +86,11 @@ flow_rule_types = {
     "temperature_rule"
 }
 
+temperature_rule_types = {
+    "temperature_window",
+    "temperature_rule"
+}
+
 flow_rows = [r for r in results if r.get("rule_type") in flow_rule_types]
 station_rows = [r for r in results if r.get("rule_type") == "station_reference"]
 
@@ -107,6 +112,32 @@ combined_rows = []
 
 for flow in flow_rows:
     flow_station_ids = flow.get("station_ids_found") or []
+
+    # Temperature rules should not be duplicated across stations when they do not
+    # explicitly name a station. Keep them as standalone rows.
+    if flow.get("rule_type") in temperature_rule_types and not flow_station_ids:
+        combined_rows.append({
+            "rule_type": flow.get("rule_type"),
+            "condition_type": flow.get("condition_type"),
+            "season_type": flow.get("season_type"),
+            "temperature_rule_type": flow.get("temperature_rule_type"),
+            "start_month": flow.get("start_month"),
+            "start_day": flow.get("start_day"),
+            "end_month": flow.get("end_month"),
+            "end_day": flow.get("end_day"),
+            "river": flow.get("river"),
+            "threshold_value": flow.get("threshold_value"),
+            "temperature_c": flow.get("temperature_c"),
+            "percent": flow.get("percent"),
+            "frequency": flow.get("frequency"),
+            "units": flow.get("units"),
+            "station_id": None,
+            "station_name": None,
+            "source_text": flow.get("source_text"),
+            "source_pdf": flow.get("source_pdf"),
+            "page_no": flow.get("page_no")
+        })
+        continue
 
     for station in station_rows:
         if flow.get("source_pdf") != station.get("source_pdf"):
