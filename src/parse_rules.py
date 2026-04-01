@@ -272,8 +272,10 @@ def extract_seasonal_rules(text):
     date_range_pattern = (
         rf"\b(?:between|from|during|for)?\s*"
         rf"({MONTH_PATTERN})\s+(\d{{1,2}})"
+        rf"(?:st|nd|rd|th)?"
         rf"\s*(?:,)?\s*(?:and|to|through|-)\s*"
-        rf"({MONTH_PATTERN})\s+(\d{{1,2}})\b"
+        rf"({MONTH_PATTERN})\s+(\d{{1,2}})"
+        rf"(?:st|nd|rd|th)?\b"
     )
 
     seasonal_trigger_phrases = [
@@ -301,7 +303,6 @@ def extract_seasonal_rules(text):
         station_ids = find_station_ids(section)
         condition_type = classify_seasonal_condition(section)
 
-        # Priority 1: explicit date range
         date_matches = list(re.finditer(date_range_pattern, section, re.IGNORECASE))
 
         if date_matches:
@@ -323,8 +324,6 @@ def extract_seasonal_rules(text):
                     "station_ids_found": station_ids,
                     "source_text": section[:1500]
                 })
-
-        # Priority 2: named season only if no date range found
         else:
             for season_name, pattern in SEASON_PATTERNS.items():
                 if re.search(pattern, section, re.IGNORECASE):
