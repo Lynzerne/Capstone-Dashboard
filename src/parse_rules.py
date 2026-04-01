@@ -2,52 +2,16 @@ import re
 
 
 STATION_LOOKUP = {
-    "05CC001": {
-        "river": "Blindman",
-        "station_name": "Blindman River near Blackfalds"
-    },
-    "05CC002": {
-        "river": "Red Deer",
-        "station_name": "Red Deer River at Red Deer"
-    },
-    "05CB007": {
-        "river": "Red Deer",
-        "station_name": "Dickson Dam Tunnel Outlet"
-    }
+    "05CC001": {"river": "Blindman", "station_name": "Blindman River near Blackfalds"},
+    "05CC002": {"river": "Red Deer", "station_name": "Red Deer River at Red Deer"},
+    "05CB007": {"river": "Red Deer", "station_name": "Dickson Dam Tunnel Outlet"}
 }
 
 
 STATION_PATTERNS = {
-    "05CC001": [
-        r"\b05CC001\b",
-        r"\bblindman river near blackfalds\b",
-        r"\bblindman near blackfalds\b"
-    ],
-    "05CC002": [
-        r"\b05CC002\b",
-        r"\bred deer river at red deer\b",
-        r"\bred deer at red deer\b"
-    ],
-    "05CB007": [
-        r"\b05CB007\b",
-        r"\bdickson dam tunnel outlet\b",
-        r"\bdickson dam\b",
-        r"\btunnel outlet\b"
-    ]
-}
-
-
-RIVER_PATTERNS = {
-    "Blindman": [
-        r"\bblindman\b",
-        r"\bblindman river\b"
-    ],
-    "Red Deer": [
-        r"\bred deer\b",
-        r"\bred deer river\b",
-        r"\bdickson dam\b",
-        r"\btunnel outlet\b"
-    ]
+    "05CC001": [r"\b05CC001\b", r"blindman river near blackfalds"],
+    "05CC002": [r"\b05CC002\b", r"red deer river at red deer"],
+    "05CB007": [r"\b05CB007\b", r"dickson dam", r"tunnel outlet"]
 }
 
 
@@ -58,354 +22,222 @@ MONTH_PATTERN = (
 
 
 def split_into_sections(text):
-    """
-    Split PDF text into paragraph-like sections.
-    """
     if not text:
         return []
-
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    text = re.sub(r"[ \t]+", " ", text)
-
-    sections = [s.strip() for s in re.split(r"\n\s*\n+", text) if s.strip()]
-
-    if len(sections) <= 1:
-        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
-        buffer = []
-        sections = []
-
-        for line in lines:
-            buffer.append(line)
-
-            if re.search(r"[.;:]$", line) or len(" ".join(buffer)) > 500:
-                sections.append(" ".join(buffer).strip())
-                buffer = []
-
-        if buffer:
-            sections.append(" ".join(buffer).strip())
-
-    return sections
+    text = re.sub(r"\s+", " ", text)
+    return re.split(r"\.\s+|\;\s+", text)
 
 
 def find_station_ids(text):
-    """
-    Find station IDs from either:
-    1. explicit station codes like 05CC002
-    2. station name phrases like 'Dickson Dam Tunnel Outlet'
-    """
-    if not text:
-        return []
+    found = set()
 
-    found_ids = set()
-
-    explicit_ids = re.findall(r"\b05[A-Z0-9]{5}\b", text, re.IGNORECASE)
-    for station_id in explicit_ids:
-        station_id = station_id.upper()
-        if station_id in STATION_LOOKUP:
-            found_ids.add(station_id)
+    explicit = re.findall(r"\b05[A-Z0-9]{5}\b", text)
+    for s in explicit:
+        if s in STATION_LOOKUP:
+            found.add(s)
 
     text_lower = text.lower()
-    for station_id, patterns in STATION_PATTERNS.items():
-        for pattern in patterns:
-            if re.search(pattern, text_lower, re.IGNORECASE):
-                found_ids.add(station_id)
-                break
+    for sid, patterns in STATION_PATTERNS.items():
+        for p in patterns:
+            if re.search(p, text_lower):
+                found.add(sid)
 
-    return sorted(found_ids)
+    return list(found)
 
 
-def infer_river_from_text(text):
-    """
-    Determine river from station IDs or river name words inside the same section.
-    """
-    if not text:
-        return None
+def infer_river(section):
+    stations = find_station_ids(section)
+    if stations:
+        return STATION_LOOKUP[stations[0]]["river"]
 
-    station_ids = find_station_ids(text)
-    for station_id in station_ids:
-        station_info = STATION_LOOKUP.get(station_id)
-        if station_info and station_info.get("river"):
-            return station_info["river"]
-
-    text_lower = text.lower()
-    for river, patterns in RIVER_PATTERNS.items():
-        for pattern in patterns:
-            if re.search(pattern, text_lower, re.IGNORECASE):
-                return river
+    if "blindman" in section.lower():
+        return "Blindman"
+    if "red deer" in section.lower():
+        return "Red Deer"
 
     return None
 
 
-def infer_river_with_context(sections, idx):
-    """
-    Try current section first, then previous section if needed.
-    """
-    river = infer_river_from_text(sections[idx])
-    if river:
-        return river
-
-    if idx > 0:
-        river = infer_river_from_text(sections[idx - 1])
-        if river:
-            return river
-
-    return None
-
-
-def classify_flow_rule(section_text, value):
-    """
-    Decide rule type from wording, not just from the number.
-    """
-    s = section_text.lower()
-
-    if "water conservation objective" in s or "wco" in s:
-        return "water_conservation_objective"
-
-    if "instream objective" in s or "instream flow objective" in s or re.search(r"\bio\b", s):
-        return "instream_objective"
-
-    if "no diversion" in s or "shall not divert" in s or "not divert" in s:
-        return "no_diversion"
-
-    if "when the flow is less than" in s or "if the flow is less than" in s:
-        return "flow_threshold"
-
-    return "unknown"
-
+# ---------------- FLOW RULES ---------------- #
 
 def extract_no_diversion_rules(text):
     results = []
-
-    if not text:
-        return results
-
-    trigger_phrases = [
-        "no diversion",
-        "not divert",
-        "shall not divert",
-        "instream objective",
-        "water conservation objective",
-        "diversion table",
-        "flow is less than"
-    ]
-
     sections = split_into_sections(text)
 
-    for i, section in enumerate(sections):
-        section_lower = section.lower()
-
-        if not any(phrase in section_lower for phrase in trigger_phrases):
+    for sec in sections:
+        if "cubic meters per second" not in sec.lower():
             continue
 
-        river = infer_river_with_context(sections, i)
+        river = infer_river(sec)
 
-        pattern = r'(\d+(?:\.\d+)?)\s*cubic\s*meters?\s*per\s*second'
+        for m in re.finditer(r'(\d+(?:\.\d+)?)\s*cubic meters per second', sec, re.I):
+            value = float(m.group(1))
 
-        for match in re.finditer(pattern, section, re.IGNORECASE):
-            value = float(match.group(1))
-            rule_type = classify_flow_rule(section, value)
+            if "instream" in sec.lower():
+                rule_type = "instream_objective"
+            elif "conservation" in sec.lower():
+                rule_type = "water_conservation_objective"
+            else:
+                rule_type = "flow_threshold"
 
             results.append({
                 "rule_type": rule_type,
                 "threshold_value": value,
                 "units": "m3/s",
                 "river": river,
-                "station_ids_found": find_station_ids(section),
-                "source_text": section[:1500]
+                "station_ids_found": find_station_ids(sec),
+                "source_text": sec
             })
 
     return results
 
 
-def extract_station_references(text):
-    results = []
-
-    if not text:
-        return results
-
-    sections = split_into_sections(text)
-
-    for section in sections:
-        station_ids = find_station_ids(section)
-
-        for station_id in station_ids:
-            station_info = STATION_LOOKUP.get(
-                station_id,
-                {"river": None, "station_name": None}
-            )
-
-            results.append({
-                "rule_type": "station_reference",
-                "station_id": station_id,
-                "station_name": station_info["station_name"],
-                "river": station_info["river"],
-                "source_text": section[:1500]
-            })
-
-    return results
-
+# ---------------- PERCENT RULES ---------------- #
 
 def extract_percent_rules(text):
     results = []
-
-    if not text:
-        return results
-
     sections = split_into_sections(text)
-    pattern = r'(\d+)%\s+of the rate of flow'
 
-    for i, section in enumerate(sections):
-        for match in re.finditer(pattern, section, re.IGNORECASE):
-            percent = int(match.group(1))
-            river = infer_river_with_context(sections, i)
+    for sec in sections:
+        if "% of the rate of flow" not in sec.lower():
+            continue
 
+        river = infer_river(sec)
+        stations = find_station_ids(sec)
+
+        # 10% band
+        band = re.search(
+            r'(\d+)%.*?greater than (\d+\.?\d*).*?less than or equal to (\d+\.?\d*)',
+            sec, re.I
+        )
+        if band:
             results.append({
                 "rule_type": "percent_diversion",
-                "percent": percent,
+                "percent": int(band.group(1)),
+                "flow_min_exclusive": float(band.group(2)),
+                "flow_max_inclusive": float(band.group(3)),
+                "max_diversion_rate": None,
+                "units": "m3/s",
                 "river": river,
-                "station_ids_found": find_station_ids(section),
-                "source_text": section[:1500]
+                "station_ids_found": stations,
+                "source_text": sec
+            })
+            continue
+
+        # 15% band
+        upper = re.search(
+            r'(\d+)%.*?maximum diversion rate of (\d+\.?\d*).*?greater than (\d+\.?\d*)',
+            sec, re.I
+        )
+        if upper:
+            results.append({
+                "rule_type": "percent_diversion",
+                "percent": int(upper.group(1)),
+                "flow_min_exclusive": float(upper.group(3)),
+                "flow_max_inclusive": None,
+                "max_diversion_rate": float(upper.group(2)),
+                "units": "m3/s",
+                "river": river,
+                "station_ids_found": stations,
+                "source_text": sec
             })
 
     return results
 
 
+# ---------------- SEASONAL ---------------- #
+
 def extract_seasonal_rules(text):
-    """
-    Extract the Red Deer seasonal station applicability clause:
-      (a) 05CC002 during open water season
-      (b) 05CB007 during winter ice cover season
-    """
     results = []
 
-    if not text:
-        return results
-
-    text_norm = re.sub(r"\s+", " ", text)
-
-    # Specific clause patterns from this style of licence
-    open_water_pattern = (
-        r"05CC002\s*\(Red Deer River at Red Deer\)\s*;?\s*during the open water season"
-    )
-    winter_ice_pattern = (
-        r"05CB007\s*\(Dickson Dam Tunnel Outlet\)\s*;?\s*during the winter ice cover season"
-    )
-
-    if re.search(open_water_pattern, text_norm, re.IGNORECASE):
+    if "05cc002" in text.lower() and "open water season" in text.lower():
         results.append({
             "rule_type": "seasonal_window",
             "condition_type": "seasonal_station_applicability",
             "season_type": "open_water_season",
             "river": "Red Deer",
             "station_ids_found": ["05CC002"],
-            "source_text": text[:1500]
+            "source_text": text
         })
 
-    if re.search(winter_ice_pattern, text_norm, re.IGNORECASE):
+    if "05cb007" in text.lower() and "winter ice cover" in text.lower():
         results.append({
             "rule_type": "seasonal_window",
             "condition_type": "seasonal_station_applicability",
             "season_type": "winter_ice_cover_season",
             "river": "Red Deer",
             "station_ids_found": ["05CB007"],
-            "source_text": text[:1500]
+            "source_text": text
         })
 
     return results
 
 
+# ---------------- TEMPERATURE ---------------- #
+
 def extract_temperature_rules(text):
-    """
-    Extract temperature-related rules only from text that explicitly mentions temperature.
-    Captures:
-    - monitoring period (June 1 to October 1)
-    - maximum temperature cutoff (22 C)
-    - baseline trigger (19 C)
-    - monitoring frequency (hourly / daily) with condition text
-    """
     results = []
 
-    if not text:
+    if "temperature" not in text.lower():
         return results
 
-    text_lower = text.lower()
-    text_norm = re.sub(r"\s+", " ", text)
-
-    if "temperature" not in text_lower:
-        return results
-
-    # For this licence, temperature rules apply to the source water / POD logic
-    river = "Blindman"
-
-    date_range_pattern = (
-        rf"\bbetween\s+"
-        rf"({MONTH_PATTERN})\s+(\d{{1,2}})"
-        rf"(?:st|nd|rd|th)?\s+"
-        rf"and\s+"
-        rf"({MONTH_PATTERN})\s+(\d{{1,2}})"
-        rf"(?:st|nd|rd|th)?\b"
-    )
-
-    celsius_pattern = r'(\d+(?:\.\d+)?)\s*(?:°|o)?\s*[cC]\b'
-
-    # Monitoring period
-    for match in re.finditer(date_range_pattern, text_norm, re.IGNORECASE):
+    # Window
+    m = re.search(r'between (\w+) (\d+) and (\w+) (\d+)', text, re.I)
+    if m:
         results.append({
             "rule_type": "temperature_window",
             "temperature_rule_type": "monitoring_period",
-            "start_month": match.group(1).title(),
-            "start_day": int(match.group(2)),
-            "end_month": match.group(3).title(),
-            "end_day": int(match.group(4)),
-            "river": river,
+            "start_month": m.group(1).title(),
+            "start_day": int(m.group(2)),
+            "end_month": m.group(3).title(),
+            "end_day": int(m.group(4)),
+            "river": "Blindman",
             "station_ids_found": [],
-            "source_text": text[:1500]
+            "source_text": text
         })
 
-    # Temperature values with meaning
-    for match in re.finditer(celsius_pattern, text_norm):
-        value = float(match.group(1))
+    # Temps
+    for m in re.finditer(r'(\d+)\s*(?:°|o)?\s*C', text):
+        val = float(m.group(1))
 
-        if value == 22 or (
-            "shall not divert" in text_lower and "exceeds" in text_lower and value >= 22
-        ):
-            temp_rule_type = "temperature_maximum"
-        elif value == 19 or "baseline temperature" in text_lower:
-            temp_rule_type = "baseline_temperature_trigger"
+        if val == 22:
+            t = "temperature_maximum"
+        elif val == 19:
+            t = "baseline_temperature_trigger"
         else:
-            temp_rule_type = "temperature_threshold"
+            t = "temperature_threshold"
 
         results.append({
             "rule_type": "temperature_rule",
-            "temperature_rule_type": temp_rule_type,
-            "temperature_c": value,
+            "temperature_rule_type": t,
+            "temperature_c": val,
             "units": "C",
-            "river": river,
+            "river": "Blindman",
             "station_ids_found": [],
-            "source_text": text[:1500]
+            "source_text": text
         })
 
-    # Monitoring frequencies with condition text
-    if re.search(r"\bhourly\b", text_norm, re.IGNORECASE):
+    # Frequency
+    if "hourly" in text.lower():
         results.append({
             "rule_type": "temperature_rule",
             "temperature_rule_type": "temperature_monitoring_frequency",
             "frequency": "hourly",
             "frequency_condition": "baseline temperature > 19 C",
-            "river": river,
+            "river": "Blindman",
             "station_ids_found": [],
-            "source_text": text[:1500]
+            "source_text": text
         })
 
-    if re.search(r"\bdaily\b", text_norm, re.IGNORECASE):
+    if "daily" in text.lower():
         results.append({
             "rule_type": "temperature_rule",
             "temperature_rule_type": "temperature_monitoring_frequency",
             "frequency": "daily",
             "frequency_condition": "previous temperature measurement < 19 C",
-            "river": river,
+            "river": "Blindman",
             "station_ids_found": [],
-            "source_text": text[:1500]
+            "source_text": text
         })
 
     return results
