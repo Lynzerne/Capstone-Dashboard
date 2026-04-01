@@ -9,7 +9,8 @@ from src.parse_rules import (
     extract_no_diversion_rules,
     extract_station_references,
     extract_percent_rules,
-    extract_seasonal_rules
+    extract_seasonal_rules,
+    extract_temperature_rules
 )
 
 PDF_FOLDER = "data/raw_pdfs"
@@ -36,13 +37,15 @@ for file_name in os.listdir(PDF_FOLDER):
             stations = extract_station_references(page_text)
             percent_rules = extract_percent_rules(page_text)
             seasonal_rules = extract_seasonal_rules(page_text)
+            temperature_rules = extract_temperature_rules(page_text)
 
             print(
                 f"Page {page['page']}: "
                 f"{len(rules)} flow rule(s), "
                 f"{len(stations)} station reference(s), "
                 f"{len(percent_rules)} percent rule(s), "
-                f"{len(seasonal_rules)} seasonal rule(s)"
+                f"{len(seasonal_rules)} seasonal rule(s), "
+                f"{len(temperature_rules)} temperature rule(s)"
             )
 
             for rule in rules:
@@ -65,6 +68,11 @@ for file_name in os.listdir(PDF_FOLDER):
                 sr["page_no"] = page["page"]
                 results.append(sr)
 
+            for tr in temperature_rules:
+                tr["source_pdf"] = file_name
+                tr["page_no"] = page["page"]
+                results.append(tr)
+
 print(f"DEBUG total raw results: {len(results)}")
 
 flow_rule_types = {
@@ -74,7 +82,8 @@ flow_rule_types = {
     "water_conservation_objective",
     "percent_diversion",
     "seasonal_window",
-    "seasonal_condition_text"
+    "temperature_window",
+    "temperature_rule"
 }
 
 flow_rows = [r for r in results if r.get("rule_type") in flow_rule_types]
@@ -84,37 +93,31 @@ print(f"DEBUG flow rows: {len(flow_rows)}")
 print(f"DEBUG station rows: {len(station_rows)}")
 
 if flow_rows:
-    print("DEBUG first 5 flow rows:")
-    for row in flow_rows[:5]:
+    print("DEBUG first 10 flow rows:")
+    for row in flow_rows[:10]:
         print(row)
 
 if station_rows:
-    print("DEBUG first 5 station rows:")
-    for row in station_rows[:5]:
+    print("DEBUG first 10 station rows:")
+    for row in station_rows[:10]:
         print(row)
 
-# Step 2: join flow rules to station references
+# Step 2: join extracted rules to station references
 combined_rows = []
 
 for flow in flow_rows:
     flow_station_ids = flow.get("station_ids_found") or []
 
-    # If multiple stations were detected, try to narrow it down
-    if len(flow_station_ids) > 1:
-        # Prefer stations explicitly named in text (longer/more specific names)
-        flow_station_ids = sorted(flow_station_ids)
-
     for station in station_rows:
         if flow.get("source_pdf") != station.get("source_pdf"):
             continue
 
-        # 🔹 PRIORITY 1: exact station match
+        # Priority 1: exact station match if station IDs were found
         if flow_station_ids:
             if station.get("station_id") not in flow_station_ids:
                 continue
-
-        # 🔹 PRIORITY 2: fallback to river match ONLY if no station found
         else:
+            # Fallback: river match only when no station was found
             if flow.get("river") != station.get("river"):
                 continue
 
@@ -125,13 +128,16 @@ for flow in flow_rows:
             "rule_type": flow.get("rule_type"),
             "condition_type": flow.get("condition_type"),
             "season_type": flow.get("season_type"),
+            "temperature_rule_type": flow.get("temperature_rule_type"),
             "start_month": flow.get("start_month"),
             "start_day": flow.get("start_day"),
             "end_month": flow.get("end_month"),
             "end_day": flow.get("end_day"),
             "river": flow.get("river"),
             "threshold_value": flow.get("threshold_value"),
+            "temperature_c": flow.get("temperature_c"),
             "percent": flow.get("percent"),
+            "frequency": flow.get("frequency"),
             "units": flow.get("units"),
             "station_id": station.get("station_id"),
             "station_name": station.get("station_name"),
@@ -146,7 +152,25 @@ print(f"DEBUG combined rows before dedupe: {len(combined_rows)}")
 df = pd.DataFrame(combined_rows)
 
 if not df.empty:
-    df = df.drop_duplicates()
+    df = df.drop_duplicates(subset=[
+        "rule_type",
+        "condition_type",
+        "season_type",
+        "temperature_rule_type",
+        "start_month",
+        "start_day",
+        "end_month",
+        "end_day",
+        "river",
+        "threshold_value",
+        "temperature_c",
+        "percent",
+        "frequency",
+        "units",
+        "station_id",
+        "source_pdf",
+        "page_no"
+    ])
 
 print(f"DEBUG final rows after dedupe: {len(df)}")
 
@@ -155,13 +179,16 @@ if df.empty:
         "rule_type",
         "condition_type",
         "season_type",
+        "temperature_rule_type",
         "start_month",
         "start_day",
         "end_month",
         "end_day",
         "river",
         "threshold_value",
+        "temperature_c",
         "percent",
+        "frequency",
         "units",
         "station_id",
         "station_name",
