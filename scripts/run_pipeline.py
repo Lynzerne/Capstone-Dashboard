@@ -64,7 +64,6 @@ for file_name in os.listdir(PDF_FOLDER):
                 sr["source_pdf"] = file_name
                 sr["page_no"] = page["page"]
                 results.append(sr)
-                
 
 print(f"DEBUG total raw results: {len(results)}")
 
@@ -77,6 +76,7 @@ flow_rule_types = {
     "seasonal_window",
     "seasonal_condition_text"
 }
+
 flow_rows = [r for r in results if r.get("rule_type") in flow_rule_types]
 station_rows = [r for r in results if r.get("rule_type") == "station_reference"]
 
@@ -136,6 +136,7 @@ if not df.empty:
 
 print(f"DEBUG final rows after dedupe: {len(df)}")
 
+if df.empty:
     df = pd.DataFrame(columns=[
         "rule_type",
         "condition_type",
