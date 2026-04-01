@@ -32,7 +32,7 @@ RIVER_PATTERNS = {
 
 
 MONTH_PATTERN = (
-    r"(january|february|march|april|may|june|july|august|"
+    r"(?:january|february|march|april|may|june|july|august|"
     r"september|october|november|december)"
 )
 
